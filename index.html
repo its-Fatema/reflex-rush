@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Reflex Rush</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(135deg, #222, #444);
+      color: #fff;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 20px;
+    }
+    #gameContainer {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 40px;
+      display: inline-block;
+      min-width: 280px;
+      position: relative;
+      overflow: hidden;
+    }
+    #keyDisplay {
+      font-size: 5rem;
+      margin: 20px;
+      transition: transform 0.2s;
+    }
+    .correct {
+      color: #4caf50;
+      transform: scale(1.2);
+    }
+    .wrong {
+      color: #f44336;
+      transform: scale(0.9);
+    }
+    #score {
+      font-size: 1.5rem;
+    }
+    #message {
+      margin-top: 10px;
+    }
+    .mobile-controls button {
+      font-size: 1.5rem;
+      margin: 5px;
+      padding: 10px 20px;
+      border-radius: 8px;
+      background-color: #333;
+      color: #fff;
+      border: none;
+    }
+    .mobile-controls {
+      margin-top: 20px;
+    }
+    #timerBar {
+      width: 100%;
+      height: 10px;
+      background: #555;
+      border-radius: 5px;
+      margin-top: 20px;
+      overflow: hidden;
+    }
+    #timerFill {
+      height: 100%;
+      background: linear-gradient(90deg, #4caf50, #f44336);
+      width: 100%;
+      transition: width 0.1s linear;
+    }
+    #popupText {
+      position: absolute;
+      top: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #ffff66;
+      text-shadow: 0 0 10px #ff0, 0 0 20px #ff0;
+      opacity: 0;
+      transition: opacity 0.3s, transform 0.3s;
+      z-index: -1;
+    }
+    #popupText.show {
+      opacity: 1;
+      transform: translateX(-50%) scale(1.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>Reflex Rush</h1>
+  <div id="gameContainer">
+    <div id="popupText"></div>
+    <div id="keyDisplay">Press to Start</div>
+    <div id="timerBar"><div id="timerFill"></div></div>
+    <div id="score">Score: 0</div>
+    <div id="message"></div>
+    <div class="mobile-controls" id="mobileControls"></div>
+  </div>
+
+  <audio id="whoosh" src="whoosh.wav"></audio>
+  <audio id="error" src="error.mp3"></audio>
+
+  <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
+  <script>
+    PokiSDK.init().then(() => {
+      console.log("Poki SDK initialized successfully");
+    }).catch(err => {
+      console.error("Poki SDK failed to initialize:", err);
+    });
+
+    const keyDisplay = document.getElementById('keyDisplay');
+    const scoreEl = document.getElementById('score');
+    const message = document.getElementById('message');
+    const mobileControls = document.getElementById('mobileControls');
+    const timerFill = document.getElementById('timerFill');
+    const popupText = document.getElementById('popupText');
+    const whoosh = document.getElementById('whoosh');
+    const error = document.getElementById('error');
+
+    let score = 0;
+    let currentKey = '';
+    let keyPool = ['A', 'S', 'D', 'F'];
+    let timeout;
+    let interval;
+    let reactionTime = 2000;
+
+    const popupQuotes = [
+      "You're getting faster!",
+      "Keep it up!",
+      "Nice reflexes!",
+      "Stay sharp!",
+      "Reflex pro in the making!",
+      "Unstoppable energy!",
+      "Crushing it!",
+      "Blazing speed!",
+      "Unreal reflexes!",
+      "Legend in the making!"
+    ];
+
+    function getKeyPool(score) {
+      if (score >= 30) return [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+      if (score >= 25) return [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].slice(0, 22);
+      if (score >= 20) return [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].slice(0, 18);
+      if (score >= 15) return [...'ABCDEFGHIJKL'];
+      if (score >= 10) return [...'ASDFGHJ'];
+      if (score >= 5) return [...'ASDFG'];
+      return ['A', 'S', 'D', 'F'];
+    }
+
+    function updateTimerBar(duration) {
+      let start = Date.now();
+      clearInterval(interval);
+      interval = setInterval(() => {
+        let elapsed = Date.now() - start;
+        let progress = Math.max(0, 1 - elapsed / duration);
+        timerFill.style.width = (progress * 100) + '%';
+        if (progress <= 0) clearInterval(interval);
+      }, 50);
+    }
+
+    function showPopupText() {
+      popupText.textContent = popupQuotes[Math.floor(Math.random() * popupQuotes.length)];
+      popupText.classList.add('show');
+      setTimeout(() => popupText.classList.remove('show'), 1500);
+    }
+
+    function nextRound() {
+      clearTimeout(timeout);
+      clearInterval(interval);
+      keyPool = getKeyPool(score);
+      currentKey = keyPool[Math.floor(Math.random() * keyPool.length)];
+      keyDisplay.textContent = currentKey;
+      keyDisplay.className = '';
+      updateMobileControls();
+      updateTimerBar(reactionTime);
+
+      // 🔊 Play whoosh sound in sync with reaction time
+      if (whoosh) {
+        whoosh.pause();
+        whoosh.currentTime = 0;
+        whoosh.playbackRate = whoosh.duration ? whoosh.duration / (reactionTime / 1000) : 1;
+        whoosh.play();
+      }
+
+      timeout = setTimeout(() => {
+        if (error) {
+          error.currentTime = 0;
+          error.play();
+        }
+        gameOver();
+      }, reactionTime);
+    }
+
+    function handleInput(key) {
+      if (key === currentKey) {
+        keyDisplay.className = 'correct';
+        score++;
+        scoreEl.textContent = `Score: ${score}`;
+        showPopupText();
+        if ([5, 10, 15, 20, 25, 30].includes(score)) {
+          message.textContent = `Level up! More keys unlocked.`;
+        } else {
+          message.textContent = '';
+        }
+        reactionTime = Math.max(700, reactionTime - 30);
+        setTimeout(nextRound, 500);
+      } else {
+        keyDisplay.className = 'wrong';
+        if (error) {
+          error.currentTime = 0;
+          error.play();
+        }
+        gameOver();
+      }
+    }
+
+    function gameOver() {
+      clearTimeout(timeout);
+      clearInterval(interval);
+      if (whoosh) {
+        whoosh.pause();
+        whoosh.currentTime = 0;
+      }
+      timerFill.style.width = '0%';
+      keyDisplay.textContent = 'Game Over';
+      keyDisplay.className = 'wrong';
+      message.textContent = `Final Score: ${score}. Tap or press any key to restart.`;
+      document.onkeydown = startGame;
+      mobileControls.onclick = startGame;
+    }
+
+    function startGame() {
+      score = 0;
+      reactionTime = 2000;
+      message.textContent = '';
+      scoreEl.textContent = 'Score: 0';
+      document.onkeydown = e => handleInput(e.key.toUpperCase());
+      mobileControls.onclick = e => {
+        if (e.target.tagName === 'BUTTON') {
+          handleInput(e.target.textContent);
+        }
+      };
+      nextRound();
+    }
+
+    function updateMobileControls() {
+      mobileControls.innerHTML = '';
+      keyPool.forEach(k => {
+        const btn = document.createElement('button');
+        btn.textContent = k;
+        mobileControls.appendChild(btn);
+      });
+    }
+
+    document.onkeydown = startGame;
+    mobileControls.onclick = startGame;
+  </script>
+</body>
+</html>
